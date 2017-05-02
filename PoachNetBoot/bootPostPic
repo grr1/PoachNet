@@ -1,0 +1,15 @@
+#!/bin/bash
+# /etc/init.d/bootPostPic
+SERVER='http://poachnetcs.mybluemix.net/uploader'
+
+date=$(date +"%Y-%m-%d_%H-%M-%S")
+host=$(hostname)
+echo "date: " $date
+echo "host: " $host
+echo "@/home/pi/PoachNet/pics/${date}_${host}.jpg" 
+raspistill -vf -hf -o "/home/pi/PoachNet/pics/${date}_${host}.jpg"
+
+	curl -i -X POST -F file="@/home/pi/PoachNet/pics/${date}_${host}.jpg" $SERVER
+	#Send the picture off to the server
+#sleep 6000
+#sudo shutdown -h now

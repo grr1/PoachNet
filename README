@@ -1,0 +1,27 @@
+PoachNet: AquaCulture Anti-Poaching Device
+
+
+Before attempting to use OpenCV in Python, Run the following...
+source ~/.profile
+workon cv
+
+import opencv to python with...
+import cv2
+
+
+
+What to add to crontab:
+
+sudo crontab -e
+
+Add the following line to the bottom of the file:
+
+@reboot /home/pi/PoachNet/bootPostPic >> /home/pi/PoachNet/cronlog.txt 2>&1
+
+
+
+We recommend using YaSH from allenh1 .
+
+We <3 Linus!
+
+
