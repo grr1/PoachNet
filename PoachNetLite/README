@@ -1,1 +1,5 @@
-Directory for PoachNetLite
+Troubleshooting:
+- If code will not upload from Arduino editor to Fona, hit reset button on Fona
+- GPS needs a clear view to the sky to get a location fix (not indoors)
+- If uploading this code to a new Fona, cut the trace on the KEY pin for it to
+  work properly

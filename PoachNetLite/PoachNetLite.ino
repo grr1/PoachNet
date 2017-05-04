@@ -15,7 +15,9 @@
 #define GPS_GPIO 12
 
 // number of MS the Feather will sleep in between SMS messages
-uint32_t sleepTimeMS = 150000;
+// Note: add 90000 MS to whatever time you actually want to sleep
+// Seems to be a bug in the library?
+uint32_t sleepTimeMS = 390000;
 
 // number of MS without a cell connection until the Feather gives up sending an SMS
 uint32_t gpsTimeoutMS = 60000;
@@ -26,8 +28,8 @@ uint8_t sendSMSFlag = 1;
 // 10-digit phone number to which SMS messages will be sent
 char phoneNumber[11] = "8125895915";
 
-// address of the Bluemix server for POST request
-char url[80] = "data.cs.purdue.edu:5656";
+// Bluemix website prefix
+String urlPrefix = "http://poachnetcs.mybluemix.net/gps/";
 
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
@@ -46,7 +48,8 @@ void startGPS()
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
   GPS.sendCommand(PGCMD_ANTENNA);
-  //sGPS.fix = false;
+  GPS.fix = false;
+  delay(1000);
   timer = millis();
 }
 
@@ -63,12 +66,12 @@ void startFona()
 void setup()
 {
   Watchdog.disable();
-  
+
   // start serial connection for debugging
   Serial.begin(115200);
 
-  // wait for serial to connect before executing (for debug only)
-  while (!Serial);
+  // wait for serial to connect before executing (use during debugging only)
+  //while (!Serial);
 
   // GPIO pin 11 controls power to Feather's cell module
   pinMode(FONA_GPIO, OUTPUT);
@@ -95,9 +98,8 @@ void goToSleep()
 
   // low-power sleeps for as long as possible on each call to Watchdog.sleep()
   uint32_t sleepMS = 0;
-  while (sleepMS < sleepTimeMS) {
+  while (sleepMS < sleepTimeMS)
     sleepMS += Watchdog.sleep();
-  }
 
   startGPS();
   startFona();
@@ -122,7 +124,6 @@ void loop()
 
     String msg = "From GPS\nlat/lon: " + latitude + ", " + longitude
                  + "\nspeed: " + speed + "\nangle: " + angle;
-    sendSMS(msg);
 
     // format POST data as JSON
     String postData = "{\"long\":\"" + longitude
@@ -134,8 +135,12 @@ void loop()
     postData.toCharArray(data, postData.length() + 1);
 
     // post the data
+    String temp = urlPrefix + latitude + "," + longitude;
+    char url[temp.length() + 1];
+    temp.toCharArray(url, temp.length() + 1);
     fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data,
                          strlen(data), NULL, NULL);
+    sendSMS(msg);
     goToSleep();
   } else if (millis() - timer >= gpsTimeoutMS) {
     String msg, latitude, longitude;
@@ -156,6 +161,9 @@ void loop()
       char data[postData.length() + 1];
       postData.toCharArray(data, postData.length() + 1);
 
+      String temp = urlPrefix + latitude + "," + longitude;
+      char url[temp.length() + 1];
+      temp.toCharArray(url, temp.length() + 1);
       fona.HTTP_POST_start(url, F("text/plain"), (uint8_t *) data,
                            strlen(data), NULL, NULL);
     } else {
