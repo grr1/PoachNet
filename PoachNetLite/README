@@ -1,5 +1,20 @@
 Troubleshooting:
 - If code will not upload from Arduino editor to Fona, hit reset button on Fona
-- GPS needs a clear view to the sky to get a location fix (not indoors)
+- GPS needs a clear view to the sky to get a location fix (not indoors).  GPS
+  seems to work OK, at least sometimes, through the waterproof container
 - If uploading this code to a new Fona, cut the trace on the KEY pin for it to
-  work properly
+  work properly with the code provided. That way, the cell module can be toggled
+  on/off by a GPIO pin
+- If Arduino IDE complains about Serial1 not being declared, make sure you
+  selected the board "Adafruit Feather 32u4" in the Tools menu.
+- If you are using this software and the Fona will turn on but refuses to send
+  texts or perform other functions expected of it, the battery might be
+  too low.  Let it charge for a while (maybe a couple hours?) and try it again.
+  This sometimes solves unexplainable problems with this device.
+- If the device's "dynamic memory" gets too big (even if it's less than 2KB),
+  the device might start having weird problems, such as pausing of execution
+  or some string variables suddenly having empty contents. Try to not let that
+  number get too big.
+
+There is a user guide for PoachNet Lite in the Google Drive folder for this
+project.
