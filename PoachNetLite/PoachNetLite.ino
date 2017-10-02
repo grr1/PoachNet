@@ -125,12 +125,12 @@ char phoneNumbers[MAX_PHONE_NUMS][PHONE_NUM_LEN + 1];
 uint8_t numPhoneNumbers;
 
 // Bluemix website prefix to which data will be posted
-char url[] = "poachnetcs.mybluemix.net/gps/";
+const char *url = "poachnetcs.mybluemix.net/gps/";
 
 // Sending this string to PoachNet for the first time activates/mates with that phone number
 // i.e., PNL stores the phone number in EEPROM as a phone number it will accept commands from
 // (note: should be lowercase because PNL will convert user message to lowercase before comparing)
-char activateMsg[] = "activate poachnet";
+const char *activateMsg = "activate poachnet";
 
 // the magic string (password) that, when texted to the device, will remove all trusted phone numbers and
 // add only the number from which this password was texted.
@@ -251,9 +251,9 @@ void init_vars()
 {
   // completely unmates and wipes vars on the fona
   /*EEPROM.write(EEPROM_NUM_PHONE_NUMS_ADDR, 0);
-    EEPROM.write(MAGIC_ADDR, 0);
-    EEPROM.write(EEPROM_MATED_FLAG_ADDR, 0);
-    reset_logs();*/
+  EEPROM.write(MAGIC_ADDR, 0);
+  EEPROM.write(EEPROM_MATED_FLAG_ADDR, 0);
+  reset_logs();*/
 
   matedFlag = EEPROM.read(EEPROM_MATED_FLAG_ADDR);
 
@@ -497,7 +497,7 @@ void handle_add_del_phone(char *response, char args[MAX_ARGS][MAX_TXT_STR_SIZE],
     // by default, enable texting for this number
     set_text_flag(numPhoneNumbers, true);
 
-    char msg[] = "You have been added to PoachNet";
+    char msg[] = "You've been added to PoachNet";
     send_SMS(msg, phoneNumbers[numPhoneNumbers]);
 
     phoneNumbers[numPhoneNumbers][PHONE_NUM_LEN] = 0;
@@ -666,6 +666,7 @@ void setup()
   start_fona();
   init_vars();
   check_messages();
+  delay(20000);
   start_GPS();
 }
 
@@ -708,20 +709,28 @@ void send_SMS(char *msg, char phoneNumber[PHONE_NUM_LEN + 1])
   fona.sendSMS(phoneNumber, msg);
 }
 
-void post_to_url(char *latitude, char *longitude)
+// coordinatesFrom is the name of the device the coordinates came from. Either "GPS" or "cell"
+void post_to_url(char *latitude, char *longitude, const char* coordinatesFrom)
 {
   uint16_t statuscode;
   int16_t len;
 
+  char fonaIMEI[20];
+  fona.getIMEI(fonaIMEI);
+
   // format the data as "lat,lon"
-  char data[strlen(url) + 2 * GPS_DATA_SIZE + 2];
-  strcpy(data, url);
-  strcat(data, latitude);
-  strcat(data, ",");
-  strcat(data, longitude);
+  char urlWithCoords[strlen(url) + strlen(coordinatesFrom) + 2 * GPS_DATA_SIZE + 27];
+  strcpy(urlWithCoords, url);
+  strcat(urlWithCoords, latitude);
+  strcat(urlWithCoords, ",");
+  strcat(urlWithCoords, longitude);
+  strcat(urlWithCoords, ",");
+  strcat(urlWithCoords, fonaIMEI);
+  strcat(urlWithCoords, ",");
+  strcat(urlWithCoords, coordinatesFrom);
 
   if (sendToServerFlag) {
-    if (!fona.HTTP_POST_start(data, F("text/plain"), (uint8_t *)" ", 1, &statuscode, (uint16_t *)&len))
+    if (!fona.HTTP_POST_start(urlWithCoords, F("text/plain"), (uint8_t *)" ", 1, &statuscode, (uint16_t *)&len))
       log_error(HTTP_POST);
   }
 }
@@ -761,7 +770,7 @@ void loop()
 
     // post the data
     if (fona.enableGPRS(true)) {
-      post_to_url(latitude, longitude);
+      post_to_url(latitude, longitude, "GPS");
     } else {
       log_error(FONA_ENABLE_GPRS);
     }
@@ -781,7 +790,7 @@ void loop()
       const char *args[] = {"lat", latitude, "lon", longitude, NULL};
       format_text_msg(msg, "From cell\n", args);
 
-      post_to_url(latitude, longitude);
+      post_to_url(latitude, longitude, "cell");
     } else {
       format_text_msg(msg, "No GPS/GPRS available", {NULL});
       log_error(NO_GPS_GPRS_AVAIL);
