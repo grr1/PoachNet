@@ -11,20 +11,6 @@
 #define FONA_RX  9
 #define GPSECHO true
 
-// enum of errors that will be logged during operation
-enum errors {
-  NO_GPS_GPRS_AVAIL,
-  FONA_DISABLE_GPRS,
-  FONA_ENABLE_GPRS,
-  SEND_SMS,
-  HTTP_POST,
-  SNOOZE_NOT_DIGIT,
-  DELETE_SMS,
-  READ_SMS,
-  GET_BATT_PERCENT,
-  NOT_VALID_PHONE_NUM
-};
-
 #define MAX_ARGS 3
 #define MAX_PHONE_NUMS 4
 #define PHONE_NUM_LEN 10
@@ -41,7 +27,6 @@ enum errors {
 
 // texting commands
 const char *SNOOZE_CMD = "snooze";
-//const char GET_LOGS_CMD[] PROGMEM = "logs";
 const char *TOGGLE_TEXT_CMD = "texting";
 const char *STATUS_CMD = "status";
 const char *RESET_CMD = "reset";
@@ -226,7 +211,7 @@ void generate_new_password()
 {
   // use time as random seed for magic reset string
   randomSeed(millis());
-  for (int i = 0; i < EEPROM_MAGIC_STRING_LEN; i++) {
+  for (uint8_t i = 0; i < EEPROM_MAGIC_STRING_LEN; i++) {
     passwd[i] = random('0', ']');
     EEPROM.write(EEPROM_MAGIC_STRING_ADDR + i, passwd[i]);
   }
@@ -283,7 +268,9 @@ void get_device_name()
 // updates the user-given name of the device
 void set_device_name(char *newName)
 {
-  fonaNameLen = strncpy(fonaName, newName, MAX_DEVICE_NAME_LEN);
+  strncpy(fonaName, newName, MAX_DEVICE_NAME_LEN);
+  fonaName[MAX_DEVICE_NAME_LEN] = 0; // make sure name is null-terminated
+  fonaNameLen = strlen(fonaName);
   EEPROM.write(EEPROM_DEVICE_NAME_LEN, fonaNameLen);
   for (uint8_t i = 0; i < fonaNameLen; i++) {
     EEPROM.write(EEPROM_DEVICE_NAME + i, fonaName[i]);
@@ -336,7 +323,7 @@ void get_texting_flags()
 
 void get_password()
 {
-  for (int i = 0; i < EEPROM_MAGIC_STRING_LEN; i++)
+  for (uint8_t i = 0; i < EEPROM_MAGIC_STRING_LEN; i++)
     passwd[i] = EEPROM.read(EEPROM_MAGIC_STRING_ADDR + i);
   passwd[EEPROM_MAGIC_STRING_LEN] = 0;
 }
@@ -466,7 +453,7 @@ void handle_snooze(char *response, char args[MAX_ARGS][MAX_TXT_STR_SIZE], int8_t
 
   // If user specifies a snooze interval, use it. Otherwise use DEFAULT_SNOOZE_MINS
   if (args[1]) {
-    for (unsigned int i = 0; i < strlen(args[1]); i++) {
+    for (uint8_t i = 0; i < strlen(args[1]); i++) {
       if (!isdigit(args[1][i])) {
         return;
       }
@@ -487,7 +474,7 @@ void handle_snooze(char *response, char args[MAX_ARGS][MAX_TXT_STR_SIZE], int8_t
     send_SMS(response, smsSender);
 
   // then send it to everyone so they know what's going on
-  broadcast_SMS(response, false);
+  broadcast_SMS(response);
 }
 
 void set_text_flag(uint8_t senderIndex, bool flag)
@@ -594,10 +581,7 @@ void delete_SMS(uint16_t smsn)
 // partially copied from FONAtest file that comes with Arduino IDE
 void check_messages()
 {
-  //Serial.println(getFreeSram());
   char smsContents[100], smsSenderBuf[PHONE_NUM_LEN + 3];
-  //Serial.println(getFreeSram());
-
   int8_t smsnum = -1, smsn = 1;
   uint16_t smslen;
 
@@ -617,7 +601,6 @@ void check_messages()
     uint8_t i;
     for (i = 0; !res; i++) {
       if (i >= MAX_GET_NUM_SMS_TRIES) {
-        //deleteSMS(
         break;
       }
       delay(1000);
@@ -689,12 +672,15 @@ void check_messages()
       handle_snooze(smsContents, args, senderIndex, smsSender);
     else if (!strcmp(args[0], RESET_CMD))
       reset_vars(senderIndex);
-    else if (args[1] && !strcmp(args[0], TOGGLE_TEXT_CMD))
-      handle_toggle_text(smsContents, senderIndex, args, smsSender);
-    else if (args[1] && args[2] && strlen(args[2]) >= 10 && !strcmp(args[0], ADD_DEL_PHONE_CMD))
-      handle_add_del_phone(smsContents, args, smsSender);
-    else if (!strcmp(args[0], NAME_CMD) && args[1])
-      handle_change_name(args[1], smsSender);
+    else if (args[1]) {
+      if (!strcmp(args[0], TOGGLE_TEXT_CMD))
+        handle_toggle_text(smsContents, senderIndex, args, smsSender);
+      else if (!strcmp(args[0], NAME_CMD))
+        handle_change_name(args[1], smsSender);
+      else if (args[2] && strlen(args[2]) >= 10 && !strcmp(args[0], ADD_DEL_PHONE_CMD))
+        handle_add_del_phone(smsContents, args, smsSender);
+
+    }
 
     // delete text message from FONA since it's been handled
     delete_SMS(smsn);
@@ -745,11 +731,8 @@ void go_to_sleep()
 }
 
 // sends a text to every phone registered with this device that has opted to receive texts
-void broadcast_SMS(const char *msg, bool checkMsgs)
+void broadcast_SMS(const char *msg)
 {
-  //Serial.println(getFreeSram());
-  if (checkMsgs)
-    check_messages();
   for (uint8_t i = 0; i < numPhoneNumbers; i++) {
     if (sendSMSFlags[i])
       send_SMS(msg, phoneNumbers[i]);
@@ -785,7 +768,7 @@ void post_to_url(char *msg, const char* coordinatesFrom)
   int16_t len;
 
   // format the data as "lat,lon"
-  char urlWithCoords[strlen(url) + strlen(coordinatesFrom) + 2 * GPS_DATA_SIZE + 27];
+  char urlWithCoords[strlen(url) + 2 * GPS_DATA_SIZE + strlen(fonaIMEI) + strlen(coordinatesFrom) + strlen(fonaName) + 5];
   strcpy(urlWithCoords, url);
   strcat(urlWithCoords, lat);
   strcat(urlWithCoords, ",");
@@ -805,7 +788,9 @@ void post_to_url(char *msg, const char* coordinatesFrom)
 void loop()
 {
   if (GPS.fix) {
-    char msg[strlen(fromGPS) + strlen(googleMapsURL) + 3 * GPS_DATA_SIZE + 3 + strlen(speedStr) + strlen(knotsStr)];
+    check_messages();
+
+    char msg[strlen(nameStr) + strlen(fonaName) + strlen(fromGPS) + strlen(googleMapsURL) + 3 * GPS_DATA_SIZE + strlen(speedStr) + strlen(knotsStr) + 3];
     char gpsData[GPS_DATA_SIZE];
     strcpy(msg, nameStr);
     strcat(msg, fonaName);
@@ -831,7 +816,7 @@ void loop()
     strcat(msg, gpsData);
     strcat(msg, knotsStr);
 
-    broadcast_SMS(msg, true);
+    broadcast_SMS(msg);
 
     // post the data
     if (fona.enableGPRS(true)) {
@@ -840,7 +825,9 @@ void loop()
     }
     go_to_sleep();
   } else if (millis() - timer >= gpsTimeoutMS) {
-    char msg[strlen(fromCell) + strlen(googleMapsURL) + 2 * GPS_DATA_SIZE + 3];
+    check_messages();
+
+    char msg[strlen(nameStr) + strlen(fonaName) + strlen(fromCell) + strlen(googleMapsURL) + 2 * GPS_DATA_SIZE + 3];
     uint16_t returncode;
     if (fona.enableGPRS(true) && fona.getGSMLoc(&returncode, msg, sizeof msg - 5) && returncode == 0) {
       char lon[GPS_DATA_SIZE], lat[GPS_DATA_SIZE];
@@ -858,14 +845,17 @@ void loop()
       strcat(msg, ",");
       strcat(msg, lon);
 
-      broadcast_SMS(msg, true);
+      broadcast_SMS(msg);
 
       // post_to_url clobbers msg, so do it after broadcast_sms
       post_to_url(msg, cellStr);
       fona.enableGPRS(false);
     } else {
+      strcpy(msg, nameStr);
+      strcat(msg, fonaName);
+      strcat(msg, "\n");
       strcpy(msg, noLocAvailable);
-      broadcast_SMS(msg, true);
+      broadcast_SMS(msg);
     }
 
     go_to_sleep();
