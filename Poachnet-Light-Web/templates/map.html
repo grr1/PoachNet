@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+{% block title %}Map{% endblock %}
+{% block head %}
+    {{ super() }}
+    <style>
+      #map {
+       height: 800px;
+       width: 100%;
+      }
+    </style>
+{% endblock %}
+{% block content %}
+    <div id="map"></div>
+    <script>
+      function initMap() {
+        var map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 4,
+          {% if map|length > 0 %}
+              center: {lat: 40.4286644, lng: -86.9137540},
+          {% endif %}
+        });
+
+        {% for m in map %}
+            {% if 'recTimeN' in m %}
+                contentString{{loop.index}} = "<p>IMEI:   {{ m['imei'] }}</p> <p>Name:   {{ m['name'] }}</p> <p>{{ m['coord'] }}</p> <p>First Timestamp:   {{ m['recTime1'] }}</p> <p>Last Timestamp:   {{ m['recTimeN'] }}</p> <p>Device Type:   {{ m['dev'] }}</p> <p>Reports from here:   {{ m['n'] }}</p>";
+            {% else %}
+                contentString{{loop.index}} = "<p>IMEI:   {{ m['imei'] }}</p> <p>Name:   {{ m['name'] }}</p> <p>{{ m['coord'] }}</p> <p>Timestamp:   {{ m['recTime1'] }}</p> <p>Device Type:   {{ m['dev'] }}</p>";
+            {% endif %}
+            infowindow{{loop.index}} = new google.maps.InfoWindow({content: contentString{{loop.index}}});
+
+            marker{{loop.index}} = new google.maps.Marker({
+                position: {{ m['coord'] }},
+                map: map,
+                label: 'X'
+            });
+
+            marker{{loop.index}}.addListener('click', function() {infowindow{{loop.index}}.open(map, marker{{loop.index}});});
+        {% endfor %}
+      }
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA1mT0fKJadkYYL4xCe3mynBs08nVnoZ5c&callback=initMap">
+    </script>
+{% endblock %}
