@@ -79,6 +79,7 @@ def addCoordRoute(wordone, wordtwo, imei, dev, name):
         date = date.astimezone(to_zone)
         datestr = date.strftime(dateFormat)
         data = {
+                    'db_id': db.doc_count(),
                     'imei': imei,
                     'type': 'coord',
                     'dev': dev,
@@ -116,23 +117,84 @@ def clearDatabaseRoute():
         traceback.print_exc()
 
 
+@app.route('/map/search', methods=['GET'])
+def showSearchByButtonResult():
+    res = request.args
+    arg = res["arg"]
+    typ = res["type"]
+    if typ == "recent":   return showMapRouteSearchRecent(arg)
+    elif typ == "name":   return showMapRouteSearchName(arg)
+    elif typ == "imei":   return showMapRouteSearchIMEI(arg)
+    else:   return render_template('error.html')
+
+
+@app.route('/map/search/recent/<num>', methods=['GET'])
+def showMapRouteSearchRecent(num):
+    return showMapRoute(search = "recent", arg = int(num))
 
 
 
-@app.route('/map')
-def showMapRoute():
+@app.route('/map/search/name/<name>', methods=['GET'])
+def showMapRouteSearchName(name):
+    return showMapRoute(search = "name", arg = name)
+
+
+
+@app.route('/map/search/imei/<imei>', methods=['GET'])
+def showMapRouteSearchIMEI(imei):
+    return showMapRoute(search = "imei", arg = imei)
+
+
+
+@app.route('/map/all', methods=['GET'])
+def showMapRoute(search = "", arg = None):
     try:
         print('[LOG] Creating map with saved points.')
         client, db = setup()
         maplist = []
-        for document in db:
-            if document['type'] == 'coord':
+        if search == "":
+            for document in db:
+                if document['type'] == 'coord':
+                    maplist.append({'coord': '{lat: ' + document['lat'] + ', lng: ' + document['lng'] + '}',
+                                    'recTime1': document['recieved'],
+                                    'imei': document['imei'],
+                                    'dev': document['dev'],
+                                    'name': document['name'],
+                                    'n': 1, #Number of times this position has been reported.
+                                  })
+        elif search == "name":
+            for document in db:
+                if document['type'] == 'coord' and document['name'] == arg:
+                    maplist.append({'coord': '{lat: ' + document['lat'] + ', lng: ' + document['lng'] + '}',
+                                    'recTime1': document['recieved'],
+                                    'imei': document['imei'],
+                                    'dev': document['dev'],
+                                    'name': document['name'],
+                                    'n': 1,
+                                  })
+        elif search == "imei":
+            for document in db:
+                if document['type'] == 'coord' and document['imei'] == arg:
+                    maplist.append({'coord': '{lat: ' + document['lat'] + ', lng: ' + document['lng'] + '}',
+                                    'recTime1': document['recieved'],
+                                    'imei': document['imei'],
+                                    'dev': document['dev'],
+                                    'name': document['name'],
+                                    'n': 1,
+                                  })
+        elif search == "recent":
+            tempList = []
+            for document in db:
+                if document['type'] == 'coord':
+                    tempList.append(document)
+            tempList = sorted(tempList, key = lambda k: k['db_id'], reverse = True)[:arg]
+            for document in tempList:
                 maplist.append({'coord': '{lat: ' + document['lat'] + ', lng: ' + document['lng'] + '}',
                                 'recTime1': document['recieved'],
                                 'imei': document['imei'],
                                 'dev': document['dev'],
                                 'name': document['name'],
-                                'n': 1, #Number of times this position has been reported.
+                                'n': 1,
                               })
         print(maplist)
         maplistTrimmed = []

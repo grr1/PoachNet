@@ -5,6 +5,30 @@
 {% endblock %}
 {% block content %}
     <div class="link-area">
-        <a href="/map">Map</a>
+        <p>View the entire Poachnet-Lite network here:</p>
+        <a href="/map/all">Map</a>
+        <br><br>
+        <p>Or search using one of the forms below.</p>
+        <br>
+        <p>Search by recent connections:</p>
+        <form action="/map/search" method="get">
+            <input type="number" name="arg" value=3><br>
+            <input type="hidden" name="type" value="recent">
+            <input type="submit" value="Search">
+        </form>
+        <br>
+        <p>Search by device name:</p>
+        <form action="/map/search" method="get">
+            <input type="text" name="arg" value="Poachnet-Device"><br>
+            <input type="hidden" name="type" value="name">
+            <input type="submit" value="Search">
+        </form>
+        <br>
+        <p>Search by IMEI:</p>
+        <form action="/map/search" method="get">
+            <input type="text" name="arg" value="000000000000000"><br>
+            <input type="hidden" name="type" value="imei">
+            <input type="submit" value="Search">
+        </form>
     </div>
 {% endblock %}
