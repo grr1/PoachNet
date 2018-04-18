@@ -1,3 +1,5 @@
+// official main file
+
 // software for PoachNet Lite
 
 #include "Adafruit_FONA.h"
@@ -18,16 +20,14 @@
 #define MAX_GET_NUM_SMS_TRIES 5
 #define MAX_TXT_STR_SIZE 16
 #define GPS_DATA_SIZE 15
-#define EEPROM_SIZE 1024
+#define EEPROM_SIZE 1024 // this is a fixed size for the hardware we are using currently
 
-#define LOG_ENTRY_SIZE 5 // size of a log entry in number of bytes
-#define MAX_LOGS (EEPROM_MATED_FLAG_ADDR - (EEPROM_MATED_FLAG_ADDR % LOG_ENTRY_SIZE))
-
-// GPIO pins that control power to GPS and FONA cell modules
-// and pin to check if reset button is pressed
-#define RESET_BUTTON_GPIO A0
-#define FONA_GPIO 11
-#define GPS_GPIO 12
+#define RESET_BUTTON_SEND_GPIO A3
+#define BATT_LED A1 // LED that blinks once for each 10% in battery life available
+#define RESET_LED A2 // LED that lights up to confirm reset button pressed
+#define RESET_BUTTON_GPIO A0 // check if reset button is pressed (to wipe data)
+#define FONA_GPIO 11 // control pwr to fona
+#define GPS_GPIO 12 // control pwr to gps
 
 // texting commands
 const char *SNOOZE_CMD = "snooze";
@@ -38,20 +38,16 @@ const char *ADD_DEL_PHONE_CMD = "phone";
 const char *NAME_CMD = "name";
 
 #define DEFAULT_SNOOZE_MINS 5 // if no arg is specified in a SNOOZE command; a big number for default (e.g., 60 mins) is bad since that would immobilize the device until the time expires
-#define DEFAULT_ALARM_MINS 5
 #define MAX_SNOOZE 255 // max snooze currently 255 mins since snooze time is stored in 1 byte
-#define MATED_VALUE 222
+#define MATED_VALUE 222 // random value chosen to represent mated status
 
-// define meanings of certain EEPROM addresses
+// define meanings of certain EEPROM addresses:
 
 // Addr of boolean- Has PNL been sent the activation message yet? This starts at false (0) and will only be set once (1 byte)
 #define EEPROM_MATED_FLAG_ADDR 896
 
-// Number of minutes until PNL should wake up again and send a text message (1 byte)
+// Number of minutes PNL will sleep before waking up to send a text (1 byte)
 #define EEPROM_NEXT_ALARM_ADDR 897
-
-// Number of times PNL has woken up (i.e., to send a text/post to Bluemix) since the last reset (2 bytes, little endian)
-#define EEPROM_NUM_WAKES_ADDR 899
 
 // Addr of boolean- should each device send a text when it wakes up? (4 bytes currently)
 // each phone number has its own flag, hence 4 flags in a row right now
@@ -60,10 +56,6 @@ const char *NAME_CMD = "name";
 // Addr of boolean- should the device post to the server when it wakes up? (1 byte)
 #define EEPROM_SERVER_FLAG_ADDR 905
 
-// Number of logs (i.e., 1-byte error values + 4-byte timestamp) currently in PNL.  The logs can be cleared via SMS command,
-// in which case EEPROM_NUM_LOGS is set to 0 (2 bytes, little endian)
-#define EEPROM_NUM_LOGS_ADDR 906
-
 // The 8-character magic string is uniquely generated for each PNL device.  It is only useful if, e.g.,
 // the phone used to control PNL is lost/stolen and the owner can no longer communicate with PNL.  The owner
 // can get a new phone and even if their phone number is different, can send the magic string to PNL.  PNL
@@ -71,8 +63,7 @@ const char *NAME_CMD = "name";
 // only one it trusts
 #define EEPROM_MAGIC_STRING_ADDR 908
 
-// The magic string is 8 characters.  This gives so many options for the magic string that
-// it could not be guessed by an attacker.
+// The magic string is 8 characters.  This gives many options for the magic string so that it cannot be reasonably guessed by an attacker.
 #define EEPROM_MAGIC_STRING_LEN 8
 
 // Address of number of phone numbers currently trusted (1 byte)
@@ -115,7 +106,7 @@ uint32_t sleepTimeMS = 390000;
 // NOTE: if you change this to a number > 65K, remember to change data type to uint32_t
 uint16_t gpsTimeoutMS = 60000;
 
-bool debugFlag = true, matedFlag = false, sendToServerFlag = true;
+bool debugFlag = false, matedFlag = false, sendToServerFlag = true;
 
 uint8_t sendSMSFlags[MAX_PHONE_NUMS];
 
@@ -235,7 +226,7 @@ void generate_new_password()
 void reset_vars(int8_t index)
 {
   // initialize time until next alarm/wake-up to 5 minutes
-  EEPROM.write(EEPROM_NEXT_ALARM_ADDR, DEFAULT_ALARM_MINS);
+  EEPROM.write(EEPROM_NEXT_ALARM_ADDR, DEFAULT_SNOOZE_MINS);
 
   // device should text by default. Reset flag to true for current device
   // or all devices if index is -1
@@ -247,19 +238,9 @@ void reset_vars(int8_t index)
   // device should send info to server by default. Set flag to true
   EEPROM.write(EEPROM_SERVER_FLAG_ADDR, 1);
 
-  // reset num of wakeups so far to 0
-  EEPROM.write(EEPROM_NUM_WAKES_ADDR, 0);
-
   // make sure to change variables in the program, too
-  sleepTimeMS = 90000 + DEFAULT_ALARM_MINS * 60000; // 5 minutes currently
+  sleepTimeMS = 90000 + DEFAULT_SNOOZE_MINS * 60000; // 5 minutes currently
   sendToServerFlag = true;
-}
-
-void reset_logs()
-{
-  // reset num of logs so far to 0
-  EEPROM.write(EEPROM_NUM_LOGS_ADDR, 0);
-  EEPROM.write(EEPROM_NUM_LOGS_ADDR + 1, 0);
 }
 
 // updates fonaName and fonaNameLen variables with values from EEPROM
@@ -325,7 +306,7 @@ void get_recognized_phones()
 void get_texting_flags()
 {
   for (uint8_t i = 0; i < MAX_PHONE_NUMS; i++)
-    sendSMSFlags[i] = EEPROM.read(EEPROM_TEXTS_FLAG_ADDR);
+    sendSMSFlags[i] = EEPROM.read(EEPROM_TEXTS_FLAG_ADDR + i);
 }
 
 void get_password()
@@ -702,18 +683,30 @@ void wipe_eeprom()
 
 void check_reset_button()
 {
+  digitalWrite(RESET_BUTTON_SEND_GPIO, HIGH);
+  delay(50);
   if (digitalRead(RESET_BUTTON_GPIO)) {
     wipe_eeprom();
+    digitalWrite(RESET_LED, HIGH);
+    delay(5000);
+    digitalWrite(RESET_LED, LOW);
 
     // instead of calling setup(), use longjmp to prevent overflowing the stack
     // when setup() executes, all local vars will be updated to reflect eeprom being wiped
     // and eeprom will be reinitialized.. 2nd arg value doesn't matter at this point
     longjmp(soft_reset, 0);
   }
+  digitalWrite(RESET_BUTTON_SEND_GPIO, LOW);
 }
 
 void setup()
 {
+  pinMode(BATT_LED, OUTPUT);
+  pinMode(RESET_LED, OUTPUT);
+
+  digitalWrite(BATT_LED, LOW);
+  digitalWrite(RESET_LED, LOW);
+
   // stuff to do during debugging/development
   if (debugFlag) {
     // start serial connection for debugging
@@ -726,6 +719,8 @@ void setup()
   setjmp(soft_reset);
 
   pinMode(RESET_BUTTON_GPIO, INPUT);
+  pinMode(RESET_BUTTON_SEND_GPIO, OUTPUT);
+  digitalWrite(RESET_BUTTON_SEND_GPIO, LOW);
 
   // poll reset button constantly => this means reset doesn't work when FONA is doing something besides this loop,
   // such as sending/receiving SMS, initializing itself, etc.
@@ -738,6 +733,18 @@ void setup()
   pinMode(GPS_GPIO, OUTPUT);
 
   start_fona();
+
+  uint16_t vbat;
+  if (fona.getBattPercent(&vbat)) {
+    while (vbat >= 10) {
+      digitalWrite(BATT_LED, HIGH);
+      delay(250);
+      digitalWrite(BATT_LED, LOW);
+      delay(250);
+      vbat -= 10;
+    }
+  }
+
   init_vars();
   start_GPS();
 }
