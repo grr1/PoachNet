@@ -1,0 +1,68 @@
+{% extends "layout.html" %}
+{% block title %}Map{% endblock %}
+{% block head %}
+    {{ super() }}
+    <style>
+      #map {
+       height: 600px;
+       width: 1200px;
+       padding: 30px;
+      }
+    </style>
+{% endblock %}
+{% block content %}
+    <div id="map">
+    <script>
+      function initMap() {
+        var map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 4,
+          center: {lat: 40.4286644, lng: -86.9137540}
+        });
+
+        {% for m in map %}
+            {% if 'recTimeN' in m %}
+                contentString{{loop.index}} = "<p>IMEI:   {{ m['imei'] }}</p> <p>Name:   {{ m['name'] }}</p> <p>{{ m['coord'] }}</p> <p>First Timestamp:   {{ m['recTime1'] }}</p> <p>Last Timestamp:   {{ m['recTimeN'] }}</p> <p>Device Type:   {{ m['dev'] }}</p> <p>Reports from here:   {{ m['n'] }}</p>";
+            {% else %}
+                contentString{{loop.index}} = "<p>IMEI:   {{ m['imei'] }}</p> <p>Name:   {{ m['name'] }}</p> <p>{{ m['coord'] }}</p> <p>Timestamp:   {{ m['recTime1'] }}</p> <p>Device Type:   {{ m['dev'] }}</p>";
+            {% endif %}
+            infowindow{{loop.index}} = new google.maps.InfoWindow({content: contentString{{loop.index}}});
+
+            marker{{loop.index}} = new google.maps.Marker({
+                position: {{ m['coord'] }},
+                map: map,
+                label: 'X'
+            });
+
+            marker{{loop.index}}.addListener('click', function() {infowindow{{loop.index}}.open(map, marker{{loop.index}});});
+        {% endfor %}
+      }
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA1mT0fKJadkYYL4xCe3mynBs08nVnoZ5c&callback=initMap">
+    </script>
+    </div>
+    <br>
+    <p>Showing {{map|length}} records.</p>
+    <br>
+    <p>Search by recent connections:</p>
+    <form action="/map/search" method="get">
+        <input type="number" name="arg" value=3>
+        <input type="hidden" name="type" value="recent">
+        <input type="submit" value="Search">
+    </form>
+    <br>
+    <p>Search by device name:</p>
+    <form action="/map/search" method="get">
+        <input type="text" name="arg" value="Poachnet-Device">
+        <input type="hidden" name="type" value="name">
+        <input type="submit" value="Search">
+    </form>
+    <br>
+    <p>Search by IMEI:</p>
+    <form action="/map/search" method="get">
+        <input type="text" name="arg" value="">
+        <input type="hidden" name="type" value="imei">
+        <input type="submit" value="Search">
+    </form>
+    <br><br><br>
+{% endblock %}
